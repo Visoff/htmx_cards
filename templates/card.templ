@@ -1,0 +1,95 @@
+package templates
+
+import (
+    "net/http"
+    "context"
+    "strconv"
+    "fmt"
+	"encoding/json"
+    "os"
+)
+
+type card_data struct {
+    Question string `json:"question"`
+    Answer   string `json:"answer"`
+}
+
+func apply_card(mux *http.ServeMux) {
+    // TODO: get filepath
+    filepath := "questions.json"
+
+    file, err := os.Open(filepath)
+    if err != nil {
+        panic(err)
+    }
+
+    cards := []card_data{}
+    err = json.NewDecoder(file).Decode(&cards)
+    if err != nil {
+        panic(err)
+    }
+    mux.HandleFunc("/template/card", func(w http.ResponseWriter, r *http.Request) {
+        i_str := r.URL.Query().Get("i")
+        if i_str == "" {
+            i_str = "0"
+        }
+        i, err := strconv.Atoi(i_str)
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        }
+        if i >= len(cards) {
+            http.Error(w, "no such card", http.StatusNotFound)
+            return
+        }
+        err = card(i, cards[i], r.URL.Query().Has("ans")).Render(context.Background(), w)
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+    })
+}
+
+templ card(i int, d card_data, ans bool) {
+    <div
+        id="card"
+        class="
+            w-3/4 p-4
+            flex flex-col items-center gap-2
+            text-3xl text-gray-500
+            rounded-xl bg-opacity-20 bg-gray-300"
+        >
+        <span class="w-fit">
+            if ans {
+                { d.Answer }
+            } else {
+                { d.Question }
+            }
+        </span>
+        <div class="flex flex-row justify-evenly w-3/4">
+            <button
+                hx-swap="outerHTML"
+                hx-target="#card"
+                hx-get={fmt.Sprintf("/template/card?i=%d", i-1)}
+            >&lt;-</button>
+            if ans {
+                <button
+                    hx-swap="outerHTML"
+                    hx-target="#card"
+                    hx-get={fmt.Sprintf("/template/card?i=%d", i)}
+                >A</button>
+            } else {
+                <button
+                    hx-swap="outerHTML"
+                    hx-target="#card"
+                    hx-get={fmt.Sprintf("/template/card?i=%d&ans=true", i)}
+                >Q</button>
+            }
+            <button
+                hx-swap="outerHTML"
+                hx-target="#card"
+                hx-get={fmt.Sprintf("/template/card?i=%d", i+1)}
+            >-></button>
+
+        </div>
+    </div>
+}
